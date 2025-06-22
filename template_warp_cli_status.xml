@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<zabbix_export>
+    <version>7.0</version>
+    <template_groups>
+        <template_group>
+            <uuid>7df96b18c230490a9a0a9e2307226338</uuid>
+            <name>Templates</name>
+        </template_group>
+    </template_groups>
+    <templates>
+        <template>
+            <uuid>7f077463c8db4ebc8e8bab260361935b</uuid>
+            <template>Template App Warp CLI Status</template>
+            <name>Template App Warp CLI Status</name>
+            <groups>
+                <group>
+                    <name>Templates</name>
+                </group>
+            </groups>
+            <items>
+                <item>
+                    <uuid>b45afc0ebbdf4d7a9136626d9a1703be</uuid>
+                    <name>Warp CLI Status</name>
+                    <key>warp.status</key>
+                    <value_type>TEXT</value_type>
+                    <trends>0</trends>
+                    <tags>
+                        <tag>
+                            <tag>Application</tag>
+                            <value>Warp CLI</value>
+                        </tag>
+                    </tags>
+                    <triggers>
+                        <trigger>
+                            <uuid>c9b203613ab0488b850a79e2e56c2c2e</uuid>
+                            <expression>last(/Template App Warp CLI Status/warp.status)<>"Connected"</expression>
+                            <name>Warp CLI is not connected</name>
+                            <priority>HIGH</priority>
+                            <tags>
+                                <tag>
+                                    <tag>Application</tag>
+                                    <value>Warp CLI</value>
+                                </tag>
+                                <tag>
+                                    <tag>Component</tag>
+                                    <value>Status</value>
+                                </tag>
+                            </tags>
+                        </trigger>
+                        <trigger>
+                            <uuid>8a7b9c2d-f3e4-4b8a-9c1e-5f6d7e8f9a0b</uuid>
+                            <expression>find(/Template App Warp CLI Status/warp.status,,"Please accept the WARP Terms of Service")>0</expression>
+                            <name>Warp CLI Terms of Service not accepted</name>
+                            <priority>AVERAGE</priority>
+                            <tags>
+                                <tag>
+                                    <tag>Application</tag>
+                                    <value>Warp CLI</value>
+                                </tag>
+                                <tag>
+                                    <tag>Component</tag>
+                                    <value>Status</value>
+                                </tag>
+                            </tags>
+                        </trigger>
+                    </triggers>
+                </item>
+            </items>
+        </template>
+    </templates>
+</zabbix_export>
