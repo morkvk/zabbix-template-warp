@@ -200,6 +200,13 @@ else
     echo "Warning: Zabbix agent2 service not found. Skipping restart."
 fi
 
+CONFIG_FILE="/etc/zabbix/zabbix_agent2.conf"
+if grep -Fx "UserParameter=warp.status,/usr/bin/warp-cli status" "$CONFIG_FILE"; then
+    sed -i '/^UserParameter=warp.status,\/usr\/bin\/warp-cli status$/d' "$CONFIG_FILE" && systemctl restart zabbix-agent2 && echo "Строка удалена, служба перезапущена"
+else
+    echo "Строка не найдена"
+fi
+
 # Включаем и запускаем службу Zabbix Agent 2
 echo "Включаем и запускаем службу Zabbix Agent 2..."
 systemctl enable zabbix-agent2
