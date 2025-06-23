@@ -66,8 +66,6 @@ if [ ! -f "$ZABBIX_DEB_PATH" ]; then
     wget "$ZABBIX_DEB_URL" -O "$ZABBIX_DEB_PATH"
 fi
 
-####################################################################
-
 # Устанавливаем скачанный пакет
 echo "Устанавливаем пакет Zabbix..."
 dpkg -i "$ZABBIX_DEB_PATH"
@@ -172,25 +170,30 @@ echo "Устанавливаем права доступа для конфигу
 chown zabbix:zabbix "$ZABBIX_WARP_CONF"
 chmod 644 "$ZABBIX_WARP_CONF"
 
-# Set permissions for Zabbix configuration file
-if id "zabbix" >/dev/null 2>&1; then
-    chown zabbix:zabbix $ZABBIX_CONF
-    chmod 644 $ZABBIX_CONF
-else
-    echo "Warning: User 'zabbix' does not exist. Skipping chown for $ZABBIX_CONF."
-    chmod 644 $ZABBIX_CONF
+# Проверяем и добавляем директорию конфигураций в zabbix_agent2.conf
+echo "Проверяем включение директории конфигураций в zabbix_agent2.conf..."
+if ! grep -q "^Include=/etc/zabbix/zabbix_agent2.d/" "$ZABBIX_CONF"; then
+    echo "Добавляем Include для директории конфигураций..."
+    echo "Include=/etc/zabbix/zabbix_agent2.d/*.conf" >> "$ZABBIX_CONF"
 fi
 
-# Restart Zabbix agent if installed
+# Устанавливаем права доступа для основного конфигурационного файла
+echo "Устанавливаем права доступа для основного конфигурационного файла..."
+if id "zabbix" >/dev/null 2>&1; then
+    chown zabbix:zabbix "$ZABBIX_CONF"
+    chmod 644 "$ZABBIX_CONF"
+else
+    echo "Warning: User 'zabbix' does not exist. Skipping chown for $ZABBIX_CONF."
+    chmod 644 "$ZABBIX_CONF"
+fi
+
+# Перезапускаем Zabbix Agent, если он установлен
+echo "Проверяем и перезапускаем Zabbix Agent..."
 if systemctl is-active --quiet zabbix-agent2.service; then
     systemctl restart zabbix-agent2.service
 else
     echo "Warning: Zabbix agent2 service not found. Skipping restart."
 fi
-
-# Verify script execution
-echo "Cloudflare WARP installation, configuration, and Zabbix integration completed."
-
 
 # Включаем и запускаем службу Zabbix Agent 2
 echo "Включаем и запускаем службу Zabbix Agent 2..."
@@ -200,5 +203,14 @@ systemctl start zabbix-agent2
 # Перезапускаем службу, чтобы применить все изменения
 echo "Перезапускаем службу Zabbix Agent 2 для применения конфигурации..."
 systemctl restart zabbix-agent2
+
+# Проверяем выполнение скрипта
+echo "Проверяем выполнение скрипта check_warp_status.sh..."
+if sudo -u zabbix "$ZABBIX_SCRIPT" >/dev/null 2>&1; then
+    echo "Скрипт check_warp_status.sh успешно выполнен."
+else
+    echo "Ошибка: скрипт check_warp_status.sh не удалось выполнить." >&2
+    exit 1
+fi
 
 echo "Установка и настройка Zabbix Agent 2 завершена!"
