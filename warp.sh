@@ -216,10 +216,6 @@ echo "Включаем и запускаем службу Zabbix Agent 2..."
 systemctl enable zabbix-agent2
 systemctl start zabbix-agent2
 
-# Перезапускаем службу, чтобы применить все изменения
-echo "Перезапускаем службу Zabbix Agent 2 для применения конфигурации..."
-systemctl restart zabbix-agent2
-
 # Проверяем выполнение скрипта
 echo "Проверяем выполнение скрипта check_warp_status.sh..."
 if sudo -u zabbix "$ZABBIX_SCRIPT" >/dev/null 2>&1; then
