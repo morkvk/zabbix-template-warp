@@ -1,105 +1,178 @@
 #!/bin/bash
-# Exit on any error
+
+# Выход при любой ошибке
 set -e
 
-# Define Zabbix configuration file path (if not set, define a default)
-ZABBIX_CONF=${ZABBIX_CONF:-/etc/zabbix/zabbix_agent2.conf}
+# Функция для проверки существования команды
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
 
-####################### Удалить контейнер
+# Функция для получения IP-адреса
+get_ip_address() {
+    local ip
+    ip=$(ip -4 addr show | grep inet | awk '{print $2}' | cut -d'/' -f1 | grep -v '127.0.0.1' | head -n 1)
+    if [ -z "$ip" ]; then
+        echo "Ошибка: не удалось определить IP-адрес сервера" >&2
+        exit 1
+    fi
+    echo "$ip"
+}
 
-# Проверяем, существует ли контейнер с именем warp
-if docker ps -a --format '{{.Names}}' | grep -q "^warp$"; then
-    # Останавливаем контейнер
-    docker stop warp
-    # Удаляем контейнер
-    docker rm warp
-    echo "Контейнер warp успешно удален"
-else
-    echo "Контейнер warp не найден"
+# Функция для проверки правил nftables и определения inbound
+get_inbound_suffix() {
+    if ! command_exists nft; then
+        echo "Ошибка: команда nft не найдена, невозможно определить inbound-суффикс" >&2
+        exit 1
+    fi
+    local nft_rule
+    nft_rule=$(nft list ruleset 2>/dev/null | grep -E 'tcp dport \{?\s*(7891|7892|7893)\s*\}? accept' || true)
+    if [[ $nft_rule =~ "tcp dport 7891 accept" || $nft_rule =~ "tcp dport { 7891" ]]; then
+        echo "inbound1"
+    elif [[ $nft_rule =~ "tcp dport 7892 accept" || $nft_rule =~ "tcp dport { 7892" ]]; then
+        echo "inbound2"
+    elif [[ $nft_rule =~ "tcp dport 7893 accept" || $nft_rule =~ "tcp dport { 7893" ]]; then
+        echo "inbound3"
+    else
+        echo "Ошибка: не найдено подходящих правил nftables для портов 7891, 7892 или 7893" >&2
+        exit 1
+    fi
+}
+
+# Формирование HOST_ALIAS
+echo "Определяем IP-адрес и inbound-суффикс..."
+IP_ADDRESS=$(get_ip_address)
+INBOUND_SUFFIX=$(get_inbound_suffix)
+HOST_ALIAS="${IP_ADDRESS}_${INBOUND_SUFFIX}"
+echo "HOST_ALIAS установлен как: $HOST_ALIAS"
+
+# Переменные
+ZABBIX_DEB_URL="https://repo.zabbix.com/zabbix/7.0/debian/pool/main/z/zabbix-release/zabbix-release_latest+debian12_all.deb"
+ZABBIX_DEB_PATH="/tmp/zabbix-release_latest+debian12_all.deb"
+ZABBIX_CONF="/etc/zabbix/zabbix_agent2.conf"
+ZABBIX_WARP_CONF="/etc/zabbix/zabbix_agent2.d/warp.conf"
+ZABBIX_SCRIPT="/etc/zabbix/scripts/check_warp_status.sh"
+SUDOERS_FILE="/etc/sudoers.d/zabbix_warp"
+
+# Скачиваем пакет Zabbix, если он ещё не скачан
+if [ ! -f "$ZABBIX_DEB_PATH" ]; then
+    echo "Скачиваем пакет Zabbix..."
+    wget "$ZABBIX_DEB_URL" -O "$ZABBIX_DEB_PATH"
 fi
 
-#######################
+####################################################################
 
-# Update package lists
-apt update
+# Устанавливаем скачанный пакет
+echo "Устанавливаем пакет Zabbix..."
+dpkg -i "$ZABBIX_DEB_PATH"
 
-# Install required packages
-apt install gpg gnupg sudo curl -y
+# Обновляем кэш apt
+echo "Обновляем кэш apt..."
+apt-get update
 
-# Install Zabbix agent to create zabbix user and group
-echo "Installing Zabbix agent..."
-DEBIAN_FRONTEND=noninteractive apt install zabbix-agent2 -y
+# Устанавливаем Zabbix Agent 2 и плагины
+echo "Устанавливаем Zabbix Agent 2 и плагины..."
+apt-get install -y zabbix-agent2 zabbix-agent2-plugin-*
 
-# Add Cloudflare WARP GPG key
-curl https://pkg.cloudflareclient.com/pubkey.gpg | gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+# Проверяем существование группы docker, создаём, если отсутствует
+echo "Создаём группу docker, если не существует..."
+groupadd -f docker
 
-# Add Cloudflare WARP repository
-echo "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ bookworm main" | tee /etc/apt/sources.list.d/cloudflare-client.list
+# Добавляем пользователя zabbix в группу docker
+echo "Добавляем пользователя zabbix в группу docker..."
+usermod -aG docker zabbix
+USER_MOD_CHANGED=$?  # Сохраняем статус изменения
 
-# Update package lists again
-apt update
+# Проверяем существование конфигурационного файла
+echo "Проверяем наличие конфигурационного файла Zabbix..."
+if [ -f "$ZABBIX_CONF" ]; then
+    # Обновляем параметр Server
+    echo "Обновляем параметр Server в конфигурации..."
+    sed -i 's/^Server=.*/Server=77.238.245.21/' "$ZABBIX_CONF" || \
+        echo "Server=77.238.245.21" >> "$ZABBIX_CONF"
 
-# Install Cloudflare WARP non-interactively
-DEBIAN_FRONTEND=noninteractive apt install cloudflare-warp -y
+    # Обновляем параметр ListenPort
+    echo "Обновляем параметр ListenPort в конфигурации..."
+    sed -i 's/^#\s*ListenPort=.*/ListenPort=10077/' "$ZABBIX_CONF" || \
+        echo "ListenPort=10077" >> "$ZABBIX_CONF"
 
-# Ensure WARP service is running
-echo "Starting WARP service..."
-systemctl enable warp-svc
-systemctl start warp-svc
+    # Обновляем параметр ServerActive
+    echo "Обновляем параметр ServerActive в конфигурации..."
+    sed -i 's/^ServerActive=.*/ServerActive=77.238.245.21:10051/' "$ZABBIX_CONF" || \
+        echo "ServerActive=77.238.245.21:10051" >> "$ZABBIX_CONF"
 
-# Wait for WARP service to be fully up (avoid IPC timeout)
-for i in {1..5}; do
-    if systemctl is-active --quiet warp-svc; then
-        echo "WARP service is running"
-        break
+    # Устанавливаем Hostname
+    echo "Устанавливаем Hostname в конфигурации..."
+    if grep -q "^#*Hostname=" "$ZABBIX_CONF"; then
+        sed -i "s/^#*Hostname=.*/Hostname=$HOST_ALIAS/" "$ZABBIX_CONF"
     else
-        echo "Waiting for WARP service to start... ($i/5)"
-        sleep 2
+        echo "Hostname=$HOST_ALIAS" >> "$ZABBIX_CONF"
     fi
-done
 
-# Check if WARP service is running, fail if not
-if ! systemctl is-active --quiet warp-svc; then
-    echo "Error: WARP service failed to start. Check logs with 'journalctl -u warp-svc'."
+    # Устанавливаем HostMetadata
+    echo "Устанавливаем HostMetadata в конфигурации..."
+    if grep -q "^#*HostMetadata=" "$ZABBIX_CONF"; then
+        sed -i "s/^#*HostMetadata=.*/HostMetadata=c1d7a08/" "$ZABBIX_CONF"
+    else
+        echo "HostMetadata=c1d7a08" >> "$ZABBIX_CONF"
+    fi
+fi
+
+# Проверяем наличие warp-cli
+echo "Проверяем наличие команды warp-cli..."
+if ! command_exists warp-cli; then
+    echo "Ошибка: команда warp-cli не найдена. Установите warp-cli перед продолжением." >&2
     exit 1
 fi
 
-# Delete old WARP registration if it exists
-echo "Removing old WARP registration if it exists..."
-echo "y" | warp-cli registration delete || {
-    echo "No old registration found or deletion failed, proceeding..."
-}
+# Настраиваем sudo для warp-cli
+echo "Настраиваем sudo для выполнения warp-cli пользователем zabbix..."
+cat << EOF > "$SUDOERS_FILE"
+zabbix ALL=(ALL) NOPASSWD: /usr/bin/warp-cli status
+EOF
+chmod 440 "$SUDOERS_FILE"
+chown root:root "$SUDOERS_FILE"
 
-# Register WARP client with automatic TOS acceptance
-echo "Registering WARP client..."
-echo "y" | warp-cli --accept-tos registration new || {
-    echo "Error during WARP registration. Retrying..."
-    sleep 2
-    echo "y" | warp-cli --accept-tos registration new || {
-        echo "Error: WARP registration failed after retry. Check logs."
-        exit 1
-    }
-}
+# Создаём директорию для скриптов Zabbix
+echo "Создаём директорию для скриптов Zabbix..."
+mkdir -p "$(dirname "$ZABBIX_SCRIPT")"
 
-# Set WARP to proxy mode with automatic confirmation
-echo "Setting WARP to proxy mode..."
-echo "y" | warp-cli mode proxy || {
-    echo "Failed to set proxy mode, but proceeding..."
-}
+# Создаём или перезаписываем скрипт check_warp_status.sh
+echo "Создаём или перезаписываем скрипт check_warp_status.sh..."
+cat << 'EOF' > "$ZABBIX_SCRIPT"
+#!/bin/bash
+# Проверяет статус warp-cli с использованием sudo и возвращает текстовый статус
+STATUS=$(sudo /usr/bin/warp-cli status | grep -o "Connected\|Disconnected" || echo "Unknown")
+echo "$STATUS"
+EOF
 
-# Set proxy port to 40000
-warp-cli proxy port 40000
+# Устанавливаем права доступа для скрипта
+echo "Устанавливаем права доступа для скрипта..."
+chown zabbix:zabbix "$ZABBIX_SCRIPT"
+chmod 755 "$ZABBIX_SCRIPT"
 
-# Connect WARP
-warp-cli connect
+# Создаём директорию для дополнительных конфигураций
+echo "Создаём директорию для дополнительных конфигураций Zabbix..."
+mkdir -p "$(dirname "$ZABBIX_WARP_CONF")"
+
+# Добавляем UserParameter в отдельный файл конфигурации
+echo "Создаём конфигурационный файл для UserParameter..."
+cat << 'EOF' > "$ZABBIX_WARP_CONF"
+UserParameter=warp.status,/etc/zabbix/scripts/check_warp_status.sh
+EOF
+
+# Устанавливаем правильные права доступа для файла конфигурации
+echo "Устанавливаем права доступа для конфигурационного файла..."
+chown zabbix:zabbix "$ZABBIX_WARP_CONF"
+chmod 644 "$ZABBIX_WARP_CONF"
 
 # Set permissions for Zabbix configuration file
 if id "zabbix" >/dev/null 2>&1; then
-    chown zabbix:zabbix "$ZABBIX_CONF"
-    chmod 644 "$ZABBIX_CONF"
+    chown zabbix:zabbix $ZABBIX_CONF
+    chmod 644 $ZABBIX_CONF
 else
     echo "Warning: User 'zabbix' does not exist. Skipping chown for $ZABBIX_CONF."
-    chmod 644 "$ZABBIX_CONF"
+    chmod 644 $ZABBIX_CONF
 fi
 
 # Restart Zabbix agent if installed
@@ -111,3 +184,15 @@ fi
 
 # Verify script execution
 echo "Cloudflare WARP installation, configuration, and Zabbix integration completed."
+
+
+# Включаем и запускаем службу Zabbix Agent 2
+echo "Включаем и запускаем службу Zabbix Agent 2..."
+systemctl enable zabbix-agent2
+systemctl start zabbix-agent2
+
+# Перезапускаем службу, чтобы применить все изменения
+echo "Перезапускаем службу Zabbix Agent 2 для применения конфигурации..."
+systemctl restart zabbix-agent2
+
+echo "Установка и настройка Zabbix Agent 2 завершена!"
