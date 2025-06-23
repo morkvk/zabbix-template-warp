@@ -26,15 +26,21 @@ get_inbound_suffix() {
         exit 1
     fi
     local nft_rule
-    nft_rule=$(nft list ruleset 2>/dev/null | grep -E 'tcp dport \{?\s*(7891|7892|7893)\s*\}? accept' || true)
+    nft_rule=$(nft list ruleset 2>/dev/null | grep -E 'tcp dport \{?\s*(7891|7892|7893|7901|7601|7701)\s*\}? accept' || true)
     if [[ $nft_rule =~ "tcp dport 7891 accept" || $nft_rule =~ "tcp dport { 7891" ]]; then
         echo "inbound1"
     elif [[ $nft_rule =~ "tcp dport 7892 accept" || $nft_rule =~ "tcp dport { 7892" ]]; then
         echo "inbound2"
     elif [[ $nft_rule =~ "tcp dport 7893 accept" || $nft_rule =~ "tcp dport { 7893" ]]; then
         echo "inbound3"
+    elif [[ $nft_rule =~ "tcp dport 7901 accept" || $nft_rule =~ "tcp dport { 7901" ]]; then
+        echo "inbound_usa"
+    elif [[ $nft_rule =~ "tcp dport 7601 accept" || $nft_rule =~ "tcp dport { 7601" ]]; then
+        echo "inbound_de"
+    elif [[ $nft_rule =~ "tcp dport 7701 accept" || $nft_rule =~ "tcp dport { 7701" ]]; then
+        echo "inbound_ru"
     else
-        echo "Ошибка: не найдено подходящих правил nftables для портов 7891, 7892 или 7893" >&2
+        echo "Ошибка: не найдено подходящих правил nftables для портов 7891, 7892, 7893, 7901, 7601 или 7701" >&2
         exit 1
     fi
 }
