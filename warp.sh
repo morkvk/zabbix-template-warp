@@ -207,6 +207,10 @@ else
     echo "Строка не найдена"
 fi
 
+# Перезапускаем службу Zabbix Agent 2
+echo "Перезапускаем службу Zabbix Agent 2..."
+systemctl restart zabbix-agent2.service
+
 # Включаем и запускаем службу Zabbix Agent 2
 echo "Включаем и запускаем службу Zabbix Agent 2..."
 systemctl enable zabbix-agent2
