@@ -26,7 +26,7 @@ get_inbound_suffix() {
         exit 1
     fi
     local nft_rule
-    nft_rule=$(nft list ruleset 2>/dev/null | grep -E 'tcp dport \{?\s*(7891|7892|7893|7894|7901|7601|7701)\s*\}? accept' || true)
+    nft_rule=$(nft list ruleset 2>/dev/null | grep -E 'tcp dport \{?\s*(7891|7892|7893|7894|7894|7901|7601|7701)\s*\}? accept' || true)
     if [[ $nft_rule =~ "tcp dport 7891 accept" || $nft_rule =~ "tcp dport { 7891" ]]; then
         echo "inbound1"
     elif [[ $nft_rule =~ "tcp dport 7892 accept" || $nft_rule =~ "tcp dport { 7892" ]]; then
