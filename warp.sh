@@ -35,6 +35,8 @@ get_inbound_suffix() {
         echo "inbound3"
     elif [[ $nft_rule =~ "tcp dport 7894 accept" || $nft_rule =~ "tcp dport { 7894" ]]; then
         echo "inbound4"
+    elif [[ $nft_rule =~ "tcp dport 7895 accept" || $nft_rule =~ "tcp dport { 7895" ]]; then
+        echo "inbound5"
     elif [[ $nft_rule =~ "tcp dport 7901 accept" || $nft_rule =~ "tcp dport { 7901" ]]; then
         echo "inbound_usa"
     elif [[ $nft_rule =~ "tcp dport 7601 accept" || $nft_rule =~ "tcp dport { 7601" ]]; then
