@@ -1,9 +1,30 @@
 #!/bin/bash
-# Проверяет статус warp-cli с использованием sudo и возвращает текстовый статус
+# Проверяет статус WARP через curl с использованием прокси на порту 40000 и возвращает текстовый статус для Zabbix
+
+# Проверка наличия curl
+if ! command -v curl &>/dev/null; then
+    echo "Unknown: curl not found"
+    exit 1
+fi
+
+# Проверка наличия warp-cli
 if ! command -v warp-cli &>/dev/null; then
     echo "Unknown: warp-cli not found"
     exit 1
 fi
 
-STATUS=$(sudo /usr/bin/warp-cli status 2>/dev/null | grep -o "Connected\|Disconnected" || echo "Unknown")
-echo "$STATUS"
+# Проверка статуса WARP через curl с прокси на порту 40000
+CURL_OUTPUT=$(curl --proxy http://127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace/ 2>/dev/null)
+if [[ $? -ne 0 ]]; then
+    echo "Disconnected: curl failed to connect through proxy"
+    exit 1
+fi
+
+WARP_STATUS=$(echo "$CURL_OUTPUT" | grep -o "warp=on\|warp=off" || echo "Unknown")
+if [[ "$WARP_STATUS" == "warp=on" ]]; then
+    echo "Connected"
+elif [[ "$WARP_STATUS" == "warp=off" ]]; then
+    echo "Disconnected: warp is off"
+else
+    echo "Unknown: unable to parse warp status"
+fi
