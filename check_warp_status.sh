@@ -13,9 +13,8 @@ if ! command -v warp-cli &>/dev/null; then
     exit 1
 fi
 
-# Проверка статуса WARP через curl с прокси на порту 40000
-CURL_OUTPUT=$(curl --proxy http://127.0.0.1:40000 https://www.cloudflare.com/cdn-cgi/trace/ 2>/dev/null)
-if [[ $? -ne 0 ]]; then
+# Проверка статуса WARP через curl с прокси на порту 40000 и таймаутом 5 секунд
+CURL_OUTPUT=$(curl --proxy http://127.0.0.1:40000 --connect-timeout 5 --max-time 10 https://www.cloudflare.com/cdn-cgi/trace/ 2>>/var/log/zabbix/warp_status>if [[ $? -ne 0 ]]; then
     echo "Disconnected: curl failed to connect through proxy"
     exit 1
 fi
