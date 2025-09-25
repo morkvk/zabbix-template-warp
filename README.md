@@ -15,7 +15,7 @@ check_warp_status.sh /etc/zabbix/scripts/check_warp_status.sh:
 
 
 ---------------------------------------------------------------
-
+Обязательно:
 
 sudo mkdir -p /var/log/zabbix
 
