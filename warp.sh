@@ -51,6 +51,10 @@ get_inbound_suffix() {
         echo "inbound_2_xhttp"
     elif [[ $nft_rule =~ "tcp dport 7703 accept" || $nft_rule =~ "tcp dport { 7703" ]]; then
         echo "inbound_3_xhttp"
+    elif [[ $nft_rule =~ "tcp dport 7704 accept" || $nft_rule =~ "tcp dport { 7704" ]]; then
+        echo "inbound_4_xhttp"
+    elif [[ $nft_rule =~ "tcp dport 7705 accept" || $nft_rule =~ "tcp dport { 7705" ]]; then
+        echo "inbound_5_xhttp"
     else
         echo "Ошибка: не найдено подходящих правил nftables для портов 7891, 7892, 7893, 7894, 7901, 7601 или 7701" >&2
         exit 1
